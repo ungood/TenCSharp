@@ -1,91 +1,96 @@
-﻿using TenCSharp.VirtualMachine.Instructions;
+﻿using System;
+using System.Collections.Generic;
 using Word = System.UInt16;
 
 namespace TenCSharp.VirtualMachine
 {
-    public enum Register
+    public partial class Processor
     {
-        A = 0x00,
-        B = 0x01,
-        C = 0x02,
-        X = 0x03,
-        Y = 0x04,
-        Z = 0x05,
-        I = 0x06,
-        J = 0x07,
-    }
+        private IEnumerator<Action> nextMicroInstruction; 
 
-    public class Processor
-    {
-        private Word[] registers = new Word[8];
-
+        public ALU ALU { get; private set; }
         public Memory Memory { get; private set; }
+        public RegisterFile Registers { get; private set; }
 
-        public Word ProgramCounter { get; internal set; }
-        public Word StackPointer { get; internal set; }
-        public Word Overflow { get; internal set; }
+        public Word ProgramCounter { get; private set; }
+        public Word StackPointer { get; private set; }
+        public Word Overflow { get; private set; }
 
-        public Processor(Memory memory)
+        public bool Halt { get; private set; }
+
+        public long InstructionCount { get; private set; }
+        public long CycleCount { get; private set; }
+
+        public Processor(Memory memory = null)
         {
-            Memory = memory;
+            ALU = new ALU();
+            Registers = new RegisterFile();
+            Memory = memory ?? new Memory();
+
+            Reset();
         }
 
         public void Reset()
         {
-            registers = new Word[8];
+            Registers.Reset();
+            Memory.Reset();
+
             ProgramCounter = 0;
             StackPointer = 0;
             Overflow = 0;
+
+            InstructionCount = 0;
+            CycleCount = 0;
+
+            Halt = false;
+            nextMicroInstruction = ExecuteLoop().GetEnumerator();
+        }
+
+        public void Run()
+        {
+            while(!Halt)
+                MicroStep();
         }
 
         public void Step()
         {
-            var fetch = NextWord;
-            var instruction = Instruction.Decode(fetch);
-            instruction.Execute(this);
+            var count = InstructionCount;
+            while(InstructionCount == count)
+                MicroStep();
         }
 
-        public Word this[Register register]
+        /// <summary>
+        /// Executes the next micro instruction
+        /// </summary>
+        public void MicroStep()
         {
-            get { return registers[(int)register]; }
-            internal set { registers[(int)register] = value; }
+            if(nextMicroInstruction.MoveNext())
+                nextMicroInstruction.Current();
         }
 
-        #region Stack Operations
-
-        public Word Push
+        private IEnumerable<Action> ExecuteLoop()
         {
-            get { return Memory[StackPointer++]; }
-            set { Memory[StackPointer++] = value; }
+            while(true)
+            {
+                var instruction = NextWord;
+                foreach(var micro in Decode(instruction))
+                {
+                    yield return micro;
+                    CycleCount++;
+                }
+
+                InstructionCount++;
+            }
         }
-
-        public Word Peek
-        {
-            get { return Memory[StackPointer]; }
-            set { Memory[StackPointer] = value; }
-        }
-
-        public Word Pop
-        {
-            get { return Memory[--StackPointer]; }
-            set { Memory[--StackPointer] = value; }
-        }
-
-        #endregion
-
-        #region Program Counter
-
-        public Word NextWord
+        
+        private Word NextWord
         {
             get { return Memory[ProgramCounter++]; }
-            set { /* Silent Fail */ }
         }
 
-        public void Jump(Word address)
+        private void SetOverflow()
         {
-            ProgramCounter = address;
+            Overflow = (Word)(ALU.Output >> 16);
         }
-
-        #endregion
     }
 }

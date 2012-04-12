@@ -4,7 +4,17 @@ namespace TenCSharp.VirtualMachine
 {
     public class Memory
     {
-        private Word[] ram = new Word[0xffff];
+        private Word[] ram;
+
+        public Memory()
+        {
+            Reset();
+        }
+
+        public void Reset()
+        {
+            ram = new Word[0xffff];
+        }
 
         public Word this[Word address]
         {
@@ -16,11 +26,6 @@ namespace TenCSharp.VirtualMachine
             {
                 ram[address] = value;
             }
-        }
-
-        public void Reset()
-        {
-            ram = new Word[0xffff];
         }
     }
 }
